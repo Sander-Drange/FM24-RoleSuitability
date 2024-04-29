@@ -2,6 +2,7 @@ import pandas as pd
 from pandasgui import show
 from tkinter import Tk, filedialog
 from io import StringIO
+import re
 
 column_name_mapping = {
     #GK technicals:
@@ -58,11 +59,28 @@ column_name_mapping = {
 }
 
 
+def parse_attribute(value):
+    if pd.isna(value) or value == '--':
+        return 9  # Handle missing values or placeholders like "--"
+    elif isinstance(value, str) and '-' in value:
+        try:
+            low, high = map(int, value.split('-'))
+            return (low + high) / 2  # Handle range by returning the average
+        except ValueError:
+            return 9  # Handle malformed ranges
+    else:
+        try:
+            return int(value)  # Convert numeric strings to integers
+        except ValueError:
+            return 9  # Handle other non-numeric strings
+
+
+
 def calculate_role_score(row, a_attributes, b_attributes, c_attributes, weights, max_attribute_value=20):
     # Calculate the sum for each category using the mapped attribute names
-    a_score = sum(row[attr] for attr in a_attributes if attr in row)
-    b_score = sum(row[attr] for attr in b_attributes if attr in row)
-    c_score = sum(row[attr] for attr in c_attributes if attr in row)
+    a_score = sum(parse_attribute(row.get(attr, 9)) for attr in a_attributes)  # Use get with default
+    b_score = sum(parse_attribute(row.get(attr, 9)) for attr in b_attributes)
+    c_score = sum(parse_attribute(row.get(attr, 9)) for attr in c_attributes)
 
     # Calculate the maximum possible scores for each category
     max_a_score = len(a_attributes) * max_attribute_value
@@ -289,7 +307,7 @@ def load_html_to_pandasgui():
 
             # Adjust columns for 'Nationality' and 'Natural Fitness' before applying the full column_name_mapping
             # Since 'Nationality' is the sixth column, we directly rename it.
-            df.columns.values[7] = 'Nationality'
+            df.columns.values[9] = 'Nationality'
 
             # Now apply column_name_mapping for other columns
             # Ensure 'Nat' for 'NaturalFitness' is included in mapping if it's after 'Nationality'
@@ -323,6 +341,14 @@ def load_html_to_pandasgui():
             #df['PF-A'] = df.apply(calculate_pressing_forward_attack_score, axis=1)
 
             df['AF-A'] = df.apply(calculate_advanced_forward_attack_score, axis=1)
+
+            # Apply the parse_attribute function to the 'Pace' and 'Acceleration' columns
+            df['Pace'] = df['Pace'].apply(parse_attribute)
+            df['Acceleration'] = df['Acceleration'].apply(parse_attribute)
+
+            # Now calculate the 'Speed' as the mean of 'Pace' and 'Acceleration'
+            df['Speed'] = df[['Pace', 'Acceleration']].mean(axis=1)
+
 
             # Assuming Speed is calculated as the average of Pace and Acceleration
             if 'Pace' in df.columns and 'Acceleration' in df.columns:
